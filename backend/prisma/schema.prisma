@@ -1,0 +1,202 @@
+generator client {
+  provider             = "prisma-client-py"
+  previewFeatures      = ["postgresqlExtensions"]
+  recursive_type_depth = "5"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_DATABASE_URL")
+}
+
+model AICredentials {
+  id         Int        @id @default(autoincrement())
+  provider   AIProvider
+  api_key    String
+  is_active  Boolean    @default(true)
+  tasks      Json       @default("[]")
+  created_at DateTime   @default(now())
+  updated_at DateTime   @updatedAt
+  name       String     @db.VarChar(100)
+
+  @@map("ai_credentials")
+}
+
+model Agent {
+  id                     Int            @id @default(autoincrement())
+  name                   String         @db.VarChar(100)
+  type                   String         @db.VarChar(50)
+  url                    String         @db.VarChar(255)
+  config                 String?
+  is_active              Boolean        @default(true)
+  is_streaming_enabled   Boolean        @default(false)
+  created_at             DateTime       @default(now())
+  description            String?
+  agent_auth_header_name String?        @db.VarChar(100)
+  agent_auth_secret      String?
+  agent_auth_strategy    String         @default("NONE") @db.VarChar(50)
+  icon                   String?        @db.VarChar(50)
+  memory_enabled         Boolean        @default(false)
+  memory_scope           String         @default("INDIVIDUAL") @db.VarChar(20)
+  memories               AgentMemory[]
+  agent_tags             AgentTag[]
+  conversations          Conversation[]
+  feedbacks              Feedback[]
+
+  @@map("agents")
+}
+
+model Conversation {
+  id         Int       @id @default(autoincrement())
+  user_id    Int
+  agent_id   Int
+  title      String    @db.VarChar(255)
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  tag_id     Int?
+  agent      Agent     @relation(fields: [agent_id], references: [id], onDelete: Cascade)
+  tag        Tag?      @relation(fields: [tag_id], references: [id], onDelete: Cascade)
+  user       User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  messages   Message[]
+
+  @@map("conversations")
+}
+
+model Message {
+  id              Int          @id @default(autoincrement())
+  text            String
+  sender          String       @db.VarChar(50)
+  timestamp       DateTime     @default(now())
+  conversation_id Int
+  files           Json?
+  feedback_rating String?      @db.VarChar(20) // 'positive', 'negative' or null
+  conversation    Conversation @relation(fields: [conversation_id], references: [id], onDelete: Cascade)
+  feedbacks       Feedback[]
+
+  @@map("messages")
+}
+
+model User {
+  id                Int            @id @default(autoincrement())
+  email             String         @unique
+  first_name        String?
+  last_name         String?
+  profile_photo_url String?
+  created_at        DateTime       @default(now())
+  updated_at        DateTime       @updatedAt
+  hashed_password   String?
+  role              UserRole       @default(USER)
+  memories          AgentMemory[]
+  backup_logs       BackupLog[]
+  conversations     Conversation[]
+  feedbacks         Feedback[]
+  tags              Tag[]          @relation("TagToUser")
+
+  @@map("users")
+}
+
+model AgentMemory {
+  id         Int      @id @default(autoincrement())
+  fact       String
+  agent_id   Int
+  user_id    Int?
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+  agent      Agent    @relation(fields: [agent_id], references: [id], onDelete: Cascade)
+  user       User?    @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@map("agent_memories")
+}
+
+model Tag {
+  id            Int            @id @default(autoincrement())
+  name          String         @unique
+  logo_url      String?
+  agent_tags    AgentTag[]
+  conversations Conversation[]
+  feedbacks     Feedback[]
+  users         User[]         @relation("TagToUser")
+
+  @@map("tags")
+}
+
+model AgentTag {
+  agent_id Int
+  tag_id   Int
+  agent    Agent @relation(fields: [agent_id], references: [id])
+  tag      Tag   @relation(fields: [tag_id], references: [id])
+
+  @@id([agent_id, tag_id])
+  @@map("agent_tags")
+}
+
+model SystemSettings {
+  id                         Int      @id @default(1)
+  is_titling_enabled         Boolean  @default(false)
+  llm_provider               String   @default("openai") @db.VarChar(50)
+  llm_model                  String?  @db.VarChar(100)
+  llm_api_key                String?
+  titling_prompt             String?
+  updated_at                 DateTime @updatedAt
+  memory_extraction_model    String?  @db.VarChar(100)
+  memory_extraction_prompt   String?
+  active_extraction_cred_id  Int?
+  active_cred_id             Int?
+  memory_extraction_provider String   @default("openai") @db.VarChar(50)
+  titling_llm_model          String?  @db.VarChar(100)
+  titling_llm_provider       String   @default("openai") @db.VarChar(50)
+  system_instance_id         String?  @db.VarChar(100)
+
+  @@map("system_settings")
+}
+
+model BackupLog {
+  id                Int      @id @default(autoincrement())
+  timestamp         DateTime @default(now())
+  user_id           Int
+  action_type       String   @db.VarChar(50)
+  entities_affected Json
+  strategy_used     String?  @db.VarChar(50)
+  status            String   @db.VarChar(50)
+  details           String?
+  user              User     @relation(fields: [user_id], references: [id])
+
+  @@map("backup_logs")
+}
+
+model Feedback {
+  id             Int      @id @default(autoincrement())
+  user_id        Int
+  agent_id       Int
+  tag_id         Int?
+  rating         Boolean
+  comment        String?
+  input_text     String
+  output_text    String
+  files_snapshot Json?
+  flow_id        String?  @db.VarChar(100)
+  agent_version  String?  @db.VarChar(50)
+  is_resolved    Boolean  @default(false)
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
+  message_id     Int?
+  agent          Agent    @relation(fields: [agent_id], references: [id], onDelete: Cascade)
+  tag            Tag?     @relation(fields: [tag_id], references: [id])
+  user           User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  message        Message? @relation(fields: [message_id], references: [id], onDelete: SetNull)
+
+  @@map("feedbacks")
+}
+
+enum AIProvider {
+  OPENAI
+  GEMINI
+  MISTRAL
+}
+
+enum UserRole {
+  USER
+  SUPERVISOR
+  ADMIN
+}
