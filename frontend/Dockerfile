@@ -1,4 +1,4 @@
-﻿# Base stage (dummy/empty to avoid errors if docker-compose references it)
+# Base stage (dummy/empty to avoid errors if docker-compose references it)
 FROM node:20-slim AS base
 WORKDIR /app
 
